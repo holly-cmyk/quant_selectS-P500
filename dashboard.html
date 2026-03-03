@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S&P 500 Live Golden Cross Screener (5d/10d MA)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+<style>
+:root {
+    --bg: #0f1117;
+    --card: #1a1d29;
+    --card-hover: #22263a;
+    --border: #2a2e3f;
+    --text: #e4e6f0;
+    --text2: #8b8fa3;
+    --white: #ffffff;
+    --green: #00c48c;
+    --green-bg: rgba(0,196,140,0.12);
+    --red: #ff4757;
+    --red-bg: rgba(255,71,87,0.12);
+    --blue: #4C8BF5;
+    --blue-bg: rgba(76,139,245,0.12);
+    --orange: #ff9f43;
+    --orange-bg: rgba(255,159,67,0.12);
+    --purple: #a55eea;
+    --gap: 14px;
+    --radius: 10px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+}
+.container { max-width: 1600px; margin: 0 auto; padding: var(--gap); }
+
+/* Header */
+.header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 18px 24px; margin-bottom: var(--gap);
+    background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
+    flex-wrap: wrap; gap: 12px;
+}
+.header-left h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+.header-left .subtitle { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.header-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.status-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+}
+.status-live { background: var(--green-bg); color: var(--green); }
+.status-loading { background: var(--orange-bg); color: var(--orange); }
+.status-error { background: var(--red-bg); color: var(--red); }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.btn {
+    padding: 8px 18px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--card); color: var(--text); font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+}
+.btn:hover { background: var(--card-hover); border-color: var(--blue); }
+.btn-primary { background: var(--blue); border-color: var(--blue); color: var(--white); }
+.btn-primary:hover { background: #3a7be0; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Filters */
+.filters {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    padding: 14px 20px; margin-bottom: var(--gap);
+    background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
+}
+.filter-group { display: flex; align-items: center; gap: 6px; }
+.filter-group label { font-size: 12px; color: var(--text2); font-weight: 500; }
+.filter-group select, .filter-group input {
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); font-size: 13px; outline: none;
+}
+.filter-group select:focus, .filter-group input:focus { border-color: var(--blue); }
+.search-box { width: 180px; }
+.filter-sep { width: 1px; height: 24px; background: var(--border); margin: 0 6px; }
+.toggle-group { display: flex; gap: 2px; }
+.toggle-btn {
+    padding: 5px 12px; border: 1px solid var(--border); background: transparent;
+    color: var(--text2); font-size: 12px; cursor: pointer; font-weight: 500;
+}
+.toggle-btn:first-child { border-radius: 6px 0 0 6px; }
+.toggle-btn:last-child { border-radius: 0 6px 6px 0; }
+.toggle-btn.active { background: var(--blue); border-color: var(--blue); color: var(--white); }
+
+/* KPI Row */
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--gap); margin-bottom: var(--gap); }
+.kpi {
+    background: var(--card); border-radius: var(--radius); padding: 18px 22px;
+    border: 1px solid var(--border); transition: border-color 0.15s;
+}
+.kpi:hover { border-color: var(--blue); }
+.kpi-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; font-weight: 600; }
+.kpi-value { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+.kpi-sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+.kpi-value.positive { color: var(--green); }
+.kpi-value.negative { color: var(--red); }
+
+/* Chart Row */
+.chart-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: var(--gap); margin-bottom: var(--gap); }
+.chart-box {
+    background: var(--card); border-radius: var(--radius); padding: 20px 24px;
+    border: 1px solid var(--border);
+}
+.chart-box h3 { font-size: 13px; font-weight: 600; margin-bottom: 14px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+.chart-box canvas { max-height: 280px; }
+
+/* Table Section */
+.section {
+    background: var(--card); border-radius: var(--radius); padding: 20px 24px;
+    border: 1px solid var(--border); margin-bottom: var(--gap);
+}
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+.section-header h2 { font-size: 16px; font-weight: 700; }
+.section-header .count { font-size: 13px; color: var(--text2); }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th {
+    text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border);
+    color: var(--text2); font-weight: 600; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
+    cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--card);
+}
+thead th:hover { color: var(--text); }
+tbody td { padding: 10px 14px; border-bottom: 1px solid rgba(42,46,63,0.5); white-space: nowrap; }
+tbody tr { cursor: pointer; transition: background 0.1s; }
+tbody tr:hover { background: var(--card-hover); }
+tbody tr.selected { background: var(--blue-bg); }
+tbody tr.today-cross { border-left: 3px solid var(--orange); }
+.badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 14px; font-size: 11px; font-weight: 600;
+}
+.badge-golden { background: var(--green-bg); color: var(--green); }
+.badge-death { background: var(--red-bg); color: var(--red); }
+.badge-today { background: var(--orange-bg); color: var(--orange); }
+.positive { color: var(--green); }
+.negative { color: var(--red); }
+.table-scroll { max-height: 600px; overflow-y: auto; }
+
+/* Detail Panel */
+.detail-panel {
+    background: var(--bg); border-radius: var(--radius); padding: 20px;
+    margin-top: 16px; display: none; border: 1px solid var(--border);
+}
+.detail-panel.show { display: block; }
+.detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.detail-header h3 { font-size: 18px; font-weight: 700; }
+.detail-header .close-btn {
+    width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 8px;
+    background: transparent; color: var(--text); cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+}
+.detail-header .close-btn:hover { background: var(--card-hover); }
+.detail-charts { display: grid; grid-template-columns: 2fr 1fr; gap: var(--gap); }
+.detail-chart-box { background: var(--card); border-radius: var(--radius); padding: 16px; border: 1px solid var(--border); }
+.detail-chart-box h4 { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+.detail-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.detail-stat { padding: 10px; background: var(--bg); border-radius: 6px; }
+.detail-stat .label { font-size: 11px; color: var(--text2); }
+.detail-stat .value { font-size: 16px; font-weight: 700; margin-top: 2px; }
+
+/* Progress bar */
+.progress-bar {
+    position: fixed; top: 0; left: 0; height: 3px; background: var(--blue);
+    transition: width 0.3s; z-index: 9999; border-radius: 0 2px 2px 0;
+}
+
+/* Loading overlay */
+.loading-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15,17,23,0.9); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; z-index: 10000;
+}
+.loading-overlay.hidden { display: none; }
+.spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { margin-top: 16px; font-size: 14px; color: var(--text2); }
+.loading-sub { font-size: 12px; color: var(--text2); margin-top: 6px; opacity: 0.7; }
+
+footer { text-align: center; padding: 20px; color: var(--text2); font-size: 11px; opacity: 0.6; }
+
+@media (max-width: 768px) {
+    .header { flex-direction: column; align-items: flex-start; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .chart-row { grid-template-columns: 1fr; }
+    .detail-charts { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progress-bar" style="width:0%"></div>
+
+<div class="loading-overlay" id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loading-text">Initializing...</div>
+    <div class="loading-sub" id="loading-sub">Connecting to Yahoo Finance API</div>
+</div>
+
+<div class="container">
+    <header class="header">
+        <div class="header-left">
+            <h1>S&P 500 Golden Cross Screener</h1>
+            <div class="subtitle">5-day / 10-day MA Crossover &middot; Live Data &middot; <span id="last-updated">—</span></div>
+        </div>
+        <div class="header-right">
+            <div id="status-badge" class="status-badge status-loading">
+                <span class="pulse"></span> Loading...
+            </div>
+            <button class="btn btn-primary" id="refresh-btn" onclick="refreshData()" disabled>
+                ↻ Refresh
+            </button>
+            <button class="btn" id="auto-toggle" onclick="toggleAutoRefresh()">
+                Auto: OFF
+            </button>
+        </div>
+    </header>
+
+    <div class="filters">
+        <div class="filter-group">
+            <label>Show</label>
+            <div class="toggle-group">
+                <button class="toggle-btn active" data-filter="golden" onclick="setStateFilter('golden',this)">Golden Cross</button>
+                <button class="toggle-btn" data-filter="all" onclick="setStateFilter('all',this)">All</button>
+                <button class="toggle-btn" data-filter="death" onclick="setStateFilter('death',this)">Death Cross</button>
+            </div>
+        </div>
+        <div class="filter-sep"></div>
+        <div class="filter-group">
+            <label>Min Win Rate</label>
+            <select id="filter-wr" onchange="applyFilters()">
+                <option value="0">Any</option>
+                <option value="30">30%+</option>
+                <option value="40">40%+</option>
+                <option value="50" selected>50%+</option>
+                <option value="60">60%+</option>
+                <option value="70">70%+</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>Min Trips</label>
+            <select id="filter-ct" onchange="applyFilters()">
+                <option value="0">Any</option>
+                <option value="3" selected>3+</option>
+                <option value="5">5+</option>
+                <option value="10">10+</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>Today Only</label>
+            <select id="filter-today" onchange="applyFilters()">
+                <option value="0">Show All</option>
+                <option value="1">Today's Crosses Only</option>
+            </select>
+        </div>
+        <div class="filter-sep"></div>
+        <div class="filter-group">
+            <input type="text" class="search-box" id="search-box" placeholder="Search ticker..." oninput="applyFilters()">
+        </div>
+    </div>
+
+    <section class="kpi-row" id="kpi-row"></section>
+
+    <section class="chart-row">
+        <div class="chart-box">
+            <h3>Top 20 by Win Rate (currently in golden cross)</h3>
+            <canvas id="chart-top-wr"></canvas>
+        </div>
+        <div class="chart-box">
+            <h3>Win Rate vs Avg Return Scatter</h3>
+            <canvas id="chart-scatter"></canvas>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="section-header">
+            <div>
+                <h2>Screener Results</h2>
+                <span class="count" id="results-count"></span>
+            </div>
+        </div>
+        <div class="table-scroll" id="table-container"></div>
+
+        <div class="detail-panel" id="detail-panel">
+            <div class="detail-header">
+                <h3 id="detail-title"></h3>
+                <button class="close-btn" onclick="closeDetail()">✕</button>
+            </div>
+            <div class="detail-charts">
+                <div class="detail-chart-box">
+                    <h4>Price Chart with 5d/10d MAs (1 Year)</h4>
+                    <canvas id="detail-price-chart" height="280"></canvas>
+                </div>
+                <div class="detail-chart-box">
+                    <h4>Round-Trip Returns</h4>
+                    <canvas id="detail-rt-chart" height="180"></canvas>
+                    <div class="detail-stats" id="detail-stats"></div>
+                </div>
+            </div>
+            <div style="margin-top:16px">
+                <h4 style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Round-Trip History</h4>
+                <div id="detail-trips-table"></div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        S&P 500 5d/10d MA Golden Cross Screener &middot; Data from Yahoo Finance API &middot; Not financial advice &middot; Prices may be delayed
+    </footer>
+</div>
+
+<script>
+// ===================== CONFIGURATION =====================
+const API_URL = '/api/data';  // Local Flask backend
+const AUTO_REFRESH_INTERVAL = 60000; // 60 seconds
+const MA_SHORT = 5;
+const MA_LONG = 10;
+
+// ===================== STATE =====================
+let allData = [];        // Full analyzed data
+let filteredData = [];   // After filters applied
+let rawPriceData = {};   // ticker -> {dates, prices, timestamps}
+let stateFilter = 'golden';
+let sortCol = 'wr';
+let sortDir = 'desc';
+let autoRefreshTimer = null;
+let charts = {};
+let selectedTicker = null;
+let todayStr = new Date().toISOString().split('T')[0];
+
+// ===================== MAIN FETCH + ANALYZE =====================
+async function refreshData() {
+    const btn = document.getElementById('refresh-btn');
+    const overlay = document.getElementById('loading-overlay');
+    const statusBadge = document.getElementById('status-badge');
+    btn.disabled = true;
+
+    // Show loading if first load
+    if (allData.length === 0) {
+        overlay.classList.remove('hidden');
+    }
+    statusBadge.className = 'status-badge status-loading';
+    statusBadge.innerHTML = '<span class="pulse"></span> Fetching...';
+    document.getElementById('progress-bar').style.width = '30%';
+    document.getElementById('loading-text').textContent = 'Fetching data from Yahoo Finance via Python...';
+    document.getElementById('loading-sub').textContent = 'This may take 30-60 seconds on first load';
+
+    try {
+        const resp = await fetch(API_URL);
+        if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+
+        document.getElementById('progress-bar').style.width = '80%';
+        document.getElementById('loading-text').textContent = 'Processing results...';
+
+        const serverData = await resp.json();
+        todayStr = serverData.today;
+
+        // Store raw price data for detail charts
+        rawPriceData = {};
+        serverData.results.forEach(r => {
+            if (r.dates && r.prices) {
+                rawPriceData[r.ticker] = {
+                    dates: r.dates,
+                    prices: r.prices,
+                    ma5: r.ma5,
+                    ma10: r.ma10,
+                    goldenCrosses: (r.gcIndices || []).map(idx => ({ idx })),
+                    deathCrosses: (r.dcIndices || []).map(idx => ({ idx }))
+                };
+            }
+        });
+
+        // Map server results to frontend format (already computed by Python)
+        allData = serverData.results;
+
+        document.getElementById('progress-bar').style.width = '100%';
+        document.getElementById('last-updated').textContent = new Date(serverData.timestamp).toLocaleString();
+        statusBadge.className = 'status-badge status-live';
+        statusBadge.innerHTML = `<span class="pulse"></span> Live &middot; ${allData.length} tickers`;
+
+        applyFilters();
+        updateCharts();
+
+        setTimeout(() => { document.getElementById('progress-bar').style.width = '0%'; }, 500);
+    } catch (e) {
+        statusBadge.className = 'status-badge status-error';
+        statusBadge.innerHTML = `Error: ${e.message}`;
+        document.getElementById('loading-text').textContent = 'Connection failed';
+        document.getElementById('loading-sub').textContent = 'Make sure app.py is running: python app.py';
+    }
+
+    overlay.classList.add('hidden');
+    btn.disabled = false;
+}
+
+// ===================== AUTO-REFRESH =====================
+let autoRefreshOn = false;
+function toggleAutoRefresh() {
+    autoRefreshOn = !autoRefreshOn;
+    const btn = document.getElementById('auto-toggle');
+    if (autoRefreshOn) {
+        btn.textContent = 'Auto: ON';
+        btn.classList.add('btn-primary');
+        autoRefreshTimer = setInterval(refreshData, AUTO_REFRESH_INTERVAL);
+    } else {
+        btn.textContent = 'Auto: OFF';
+        btn.classList.remove('btn-primary');
+        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+    }
+}
+
+// ===================== FILTERS =====================
+function setStateFilter(val, el) {
+    stateFilter = val;
+    document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    applyFilters();
+}
+
+function applyFilters() {
+    const minWR = parseFloat(document.getElementById('filter-wr').value);
+    const minCT = parseInt(document.getElementById('filter-ct').value);
+    const todayOnly = document.getElementById('filter-today').value === '1';
+    const search = document.getElementById('search-box').value.toUpperCase();
+
+    filteredData = allData.filter(r => {
+        if (stateFilter === 'golden' && r.currentState !== 'golden') return false;
+        if (stateFilter === 'death' && r.currentState !== 'death') return false;
+        if (minWR > 0 && (r.winRate === null || r.winRate < minWR)) return false;
+        if (minCT > 0 && r.closedTrips < minCT) return false;
+        if (todayOnly && !r.isToday) return false;
+        if (search && !r.ticker.includes(search)) return false;
+        return true;
+    });
+
+    renderKPIs();
+    renderTable();
+}
+
+// ===================== KPIs =====================
+function renderKPIs() {
+    const golden = filteredData.filter(r => r.currentState === 'golden');
+    const todayCross = filteredData.filter(r => r.isTodayGolden);
+    const withWR = filteredData.filter(r => r.winRate !== null);
+    const avgWR = withWR.length > 0 ? (withWR.reduce((s,r) => s + r.winRate, 0) / withWR.length).toFixed(1) : '—';
+    const avgRet = withWR.length > 0 ? (withWR.reduce((s,r) => s + r.avgReturn, 0) / withWR.length).toFixed(2) : '—';
+    const openPos = golden.filter(r => r.openReturn !== null);
+    const openProfitable = openPos.filter(r => r.openReturn > 0).length;
+
+    document.getElementById('kpi-row').innerHTML = `
+        <div class="kpi">
+            <div class="kpi-label">Matching Tickers</div>
+            <div class="kpi-value">${filteredData.length}</div>
+            <div class="kpi-sub">of ${allData.length} analyzed</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">In Golden Cross</div>
+            <div class="kpi-value positive">${golden.length}</div>
+            <div class="kpi-sub">${(golden.length / Math.max(allData.length, 1) * 100).toFixed(0)}% of S&P 500</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Today's New Golden</div>
+            <div class="kpi-value" style="color:var(--orange)">${todayCross.length}</div>
+            <div class="kpi-sub">${todayCross.map(r => r.ticker).join(', ') || 'None detected yet'}</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Avg Win Rate</div>
+            <div class="kpi-value">${avgWR}%</div>
+            <div class="kpi-sub">across ${withWR.length} tickers with data</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Avg Return/Trip</div>
+            <div class="kpi-value ${parseFloat(avgRet) >= 0 ? 'positive' : 'negative'}">${avgRet}%</div>
+            <div class="kpi-sub">per golden→death round-trip</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Open Positions Profitable</div>
+            <div class="kpi-value positive">${openProfitable}/${openPos.length}</div>
+            <div class="kpi-sub">${openPos.length > 0 ? (openProfitable/openPos.length*100).toFixed(0) : 0}% profitable</div>
+        </div>
+    `;
+}
+
+// ===================== TABLE =====================
+function renderTable() {
+    const sorted = [...filteredData].sort((a, b) => {
+        let av = a[sortCol], bv = b[sortCol];
+        if (av === null || av === undefined) av = sortDir === 'asc' ? Infinity : -Infinity;
+        if (bv === null || bv === undefined) bv = sortDir === 'asc' ? Infinity : -Infinity;
+        if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+        return sortDir === 'asc' ? av - bv : bv - av;
+    });
+
+    document.getElementById('results-count').textContent = `${sorted.length} tickers`;
+
+    const cols = [
+        { key: 'ticker', label: 'Ticker', fmt: (v, r) => {
+            let badges = '';
+            if (r.isTodayGolden) badges += ' <span class="badge badge-today">NEW TODAY</span>';
+            return `<strong>${v}</strong>${badges}`;
+        }},
+        { key: 'currentState', label: 'State', fmt: v => v === 'golden'
+            ? '<span class="badge badge-golden">● GOLDEN</span>'
+            : '<span class="badge badge-death">● DEATH</span>' },
+        { key: 'currentPrice', label: 'Price', fmt: v => '$' + v.toFixed(2) },
+        { key: 'currentMA5', label: '5d MA', fmt: v => v ? '$' + v.toFixed(2) : '—' },
+        { key: 'currentMA10', label: '10d MA', fmt: v => v ? '$' + v.toFixed(2) : '—' },
+        { key: 'lastGoldenDate', label: 'Last GC Date', fmt: (v, r) => {
+            if (!v) return '—';
+            const display = v === todayStr ? `<span style="color:var(--orange);font-weight:600">${v}</span>` : v;
+            return display;
+        }},
+        { key: 'lastGoldenPrice', label: 'GC Price', fmt: v => v ? '$' + v.toFixed(2) : '—' },
+        { key: 'openReturn', label: 'Open Ret', fmt: v => v !== null
+            ? `<span class="${v >= 0 ? 'positive' : 'negative'}">${v >= 0 ? '+' : ''}${v.toFixed(2)}%</span>` : '—' },
+        { key: 'openHold', label: 'Hold', fmt: v => v !== null ? v + 'd' : '—' },
+        { key: 'closedTrips', label: 'Trips', fmt: v => v },
+        { key: 'winRate', label: 'Win Rate', fmt: v => v !== null
+            ? `<span class="${v >= 50 ? 'positive' : v >= 40 ? '' : 'negative'}">${v.toFixed(1)}%</span>` : '—' },
+        { key: 'avgReturn', label: 'Avg Ret', fmt: v => v !== null
+            ? `<span class="${v >= 0 ? 'positive' : 'negative'}">${v >= 0 ? '+' : ''}${v.toFixed(2)}%</span>` : '—' },
+    ];
+
+    let html = '<table><thead><tr>';
+    cols.forEach(c => {
+        const arrow = sortCol === c.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+        html += `<th onclick="doSort('${c.key}')">${c.label}${arrow}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    sorted.forEach(r => {
+        const isSelected = selectedTicker === r.ticker ? ' selected' : '';
+        const isTodayRow = r.isTodayGolden ? ' today-cross' : '';
+        html += `<tr class="${isSelected}${isTodayRow}" onclick="showDetail('${r.ticker}')">`;
+        cols.forEach(c => {
+            html += `<td>${c.fmt(r[c.key], r)}</td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+
+    document.getElementById('table-container').innerHTML = html;
+}
+
+function doSort(col) {
+    if (sortCol === col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    else { sortCol = col; sortDir = 'desc'; }
+    renderTable();
+}
+
+// ===================== CHARTS =====================
+function updateCharts() {
+    const withWR = allData.filter(r => r.winRate !== null && r.closedTrips >= 3);
+
+    // Top 20 by win rate (golden cross)
+    if (charts.topWR) charts.topWR.destroy();
+    const top20 = withWR.filter(r => r.currentState === 'golden').sort((a, b) => b.winRate - a.winRate).slice(0, 20);
+    const ctx1 = document.getElementById('chart-top-wr').getContext('2d');
+    charts.topWR = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+            labels: top20.map(r => r.ticker),
+            datasets: [{
+                label: 'Win Rate %',
+                data: top20.map(r => r.winRate),
+                backgroundColor: top20.map(r => r.isTodayGolden
+                    ? 'rgba(255,159,67,0.8)' : 'rgba(0,196,140,0.6)'),
+                borderRadius: 4,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: {
+                    label: ctx => `${ctx.parsed.x}% (${top20[ctx.dataIndex].closedTrips} trips, avg ret: ${top20[ctx.dataIndex].avgReturn}%)`
+                }}
+            },
+            scales: {
+                x: { beginAtZero: true, max: 100, grid: { color: 'rgba(42,46,63,0.5)' },
+                    ticks: { color: 'var(--text2)', callback: v => v + '%' } },
+                y: { grid: { display: false }, ticks: { color: 'var(--text)', font: { weight: '600', size: 11 } } }
+            }
+        }
+    });
+
+    // Scatter: win rate vs avg return
+    if (charts.scatter) charts.scatter.destroy();
+    const ctx2 = document.getElementById('chart-scatter').getContext('2d');
+    const scatterData = withWR.map(r => ({ x: r.winRate, y: r.avgReturn, ticker: r.ticker, state: r.currentState }));
+    charts.scatter = new Chart(ctx2, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Tickers',
+                data: scatterData,
+                backgroundColor: scatterData.map(d =>
+                    d.state === 'golden' ? 'rgba(0,196,140,0.5)' : 'rgba(255,71,87,0.3)'),
+                pointRadius: 5,
+                pointHoverRadius: 8
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: {
+                    label: ctx => `${scatterData[ctx.dataIndex].ticker}: WR=${ctx.parsed.x}%, Ret=${ctx.parsed.y}%`
+                }}
+            },
+            scales: {
+                x: { title: { display: true, text: 'Win Rate %', color: 'var(--text2)' },
+                    min: 0, max: 100, grid: { color: 'rgba(42,46,63,0.5)' },
+                    ticks: { color: 'var(--text2)' } },
+                y: { title: { display: true, text: 'Avg Return %', color: 'var(--text2)' },
+                    grid: { color: 'rgba(42,46,63,0.5)' }, ticks: { color: 'var(--text2)' } }
+            }
+        }
+    });
+}
+
+// ===================== DETAIL PANEL =====================
+function showDetail(ticker) {
+    selectedTicker = ticker;
+    const r = allData.find(d => d.ticker === ticker);
+    const raw = rawPriceData[ticker];
+    if (!r || !raw) return;
+
+    const panel = document.getElementById('detail-panel');
+    panel.classList.add('show');
+    document.getElementById('detail-title').textContent =
+        `${ticker} — $${r.currentPrice.toFixed(2)} ${r.currentState === 'golden' ? '● Golden Cross' : '● Death Cross'}`;
+
+    // Scroll to panel
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Re-render table to highlight selected row
+    renderTable();
+
+    // ---- Price Chart ----
+    if (charts.detailPrice) charts.detailPrice.destroy();
+    const ctx1 = document.getElementById('detail-price-chart').getContext('2d');
+
+    // Prepare annotation points for golden/death crosses
+    const gcPoints = raw.goldenCrosses.map(gc => ({ x: gc.date, y: raw.prices[gc.idx] }));
+    const dcPoints = raw.deathCrosses.map(dc => ({ x: dc.date, y: raw.prices[dc.idx] }));
+
+    charts.detailPrice = new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: raw.dates,
+            datasets: [
+                {
+                    label: 'Price',
+                    data: raw.prices.map(p => p ? Math.round(p * 100) / 100 : null),
+                    borderColor: '#e4e6f0',
+                    borderWidth: 1.8,
+                    fill: false,
+                    pointRadius: 0,
+                    tension: 0.2,
+                    order: 3
+                },
+                {
+                    label: `${MA_SHORT}d MA`,
+                    data: raw.ma5.map(m => m ? Math.round(m * 100) / 100 : null),
+                    borderColor: 'rgba(0,196,140,0.9)',
+                    borderWidth: 1.5,
+                    borderDash: [4, 2],
+                    fill: false,
+                    pointRadius: 0,
+                    tension: 0.3,
+                    order: 2
+                },
+                {
+                    label: `${MA_LONG}d MA`,
+                    data: raw.ma10.map(m => m ? Math.round(m * 100) / 100 : null),
+                    borderColor: 'rgba(255,71,87,0.9)',
+                    borderWidth: 1.5,
+                    borderDash: [4, 2],
+                    fill: false,
+                    pointRadius: 0,
+                    tension: 0.3,
+                    order: 1
+                },
+                {
+                    label: 'Golden Cross',
+                    data: raw.dates.map((d, i) => {
+                        const gc = raw.goldenCrosses.find(g => g.idx === i);
+                        return gc ? Math.round(raw.prices[i] * 100) / 100 : null;
+                    }),
+                    borderColor: 'transparent',
+                    backgroundColor: 'rgba(0,196,140,1)',
+                    pointRadius: raw.dates.map((d, i) => raw.goldenCrosses.some(g => g.idx === i) ? 6 : 0),
+                    pointStyle: 'triangle',
+                    showLine: false,
+                    order: 0
+                },
+                {
+                    label: 'Death Cross',
+                    data: raw.dates.map((d, i) => {
+                        const dc = raw.deathCrosses.find(g => g.idx === i);
+                        return dc ? Math.round(raw.prices[i] * 100) / 100 : null;
+                    }),
+                    borderColor: 'transparent',
+                    backgroundColor: 'rgba(255,71,87,1)',
+                    pointRadius: raw.dates.map((d, i) => raw.deathCrosses.some(g => g.idx === i) ? 6 : 0),
+                    pointStyle: 'crossRot',
+                    showLine: false,
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { color: 'var(--text2)', usePointStyle: true, padding: 12, font: { size: 11 } }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(26,29,41,0.95)',
+                    borderColor: 'var(--border)',
+                    borderWidth: 1,
+                    titleColor: 'var(--text)',
+                    bodyColor: 'var(--text2)',
+                    padding: 10,
+                    callbacks: {
+                        label: function(ctx) {
+                            if (ctx.parsed.y === null) return null;
+                            return `${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(42,46,63,0.3)' },
+                    ticks: { color: 'var(--text2)', font: { size: 10 }, maxTicksLimit: 12 }
+                },
+                y: {
+                    grid: { color: 'rgba(42,46,63,0.3)' },
+                    ticks: { color: 'var(--text2)', font: { size: 10 }, callback: v => '$' + v.toFixed(0) }
+                }
+            }
+        }
+    });
+
+    // ---- Round-Trip Bar Chart ----
+    if (charts.detailRT) charts.detailRT.destroy();
+    const ctx2 = document.getElementById('detail-rt-chart').getContext('2d');
+    if (r.roundTrips.length > 0) {
+        const labels = r.roundTrips.map(rt => (rt.status === 'open' ? '⬤ ' : '') + rt.entryDate);
+        const returns = r.roundTrips.map(rt => rt.returnPct);
+        charts.detailRT = new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Return %',
+                    data: returns,
+                    backgroundColor: returns.map(v => v >= 0 ? 'rgba(0,196,140,0.7)' : 'rgba(255,71,87,0.7)'),
+                    borderRadius: 3
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: 'var(--text2)', font: { size: 9 }, maxRotation: 45 } },
+                    y: { grid: { color: 'rgba(42,46,63,0.3)' },
+                        ticks: { color: 'var(--text2)', callback: v => v + '%' } }
+                }
+            }
+        });
+    }
+
+    // ---- Stats ----
+    document.getElementById('detail-stats').innerHTML = `
+        <div class="detail-stat"><div class="label">Win Rate</div><div class="value ${r.winRate >= 50 ? 'positive' : ''}">${r.winRate !== null ? r.winRate.toFixed(1) + '%' : '—'}</div></div>
+        <div class="detail-stat"><div class="label">Avg Return</div><div class="value ${r.avgReturn >= 0 ? 'positive' : 'negative'}">${r.avgReturn !== null ? (r.avgReturn >= 0 ? '+' : '') + r.avgReturn.toFixed(2) + '%' : '—'}</div></div>
+        <div class="detail-stat"><div class="label">Avg Hold</div><div class="value">${r.avgHold !== null ? r.avgHold.toFixed(1) + 'd' : '—'}</div></div>
+        <div class="detail-stat"><div class="label">Total Trips</div><div class="value">${r.closedTrips} closed${r.openReturn !== null ? ' + 1 open' : ''}</div></div>
+    `;
+
+    // ---- Trips Table ----
+    let thtml = '<table><thead><tr><th>Entry</th><th>Exit</th><th>Entry $</th><th>Exit $</th><th>Return</th><th>Hold</th><th>Status</th></tr></thead><tbody>';
+    r.roundTrips.forEach(rt => {
+        const cls = rt.returnPct >= 0 ? 'positive' : 'negative';
+        const isOpen = rt.status === 'open';
+        thtml += `<tr${isOpen ? ' style="background:rgba(76,139,245,0.08)"' : ''}>
+            <td>${rt.entryDate}</td>
+            <td>${rt.exitDate || '—'}</td>
+            <td>$${rt.entryPrice.toFixed(2)}</td>
+            <td>$${rt.exitPrice.toFixed(2)}</td>
+            <td class="${cls}">${rt.returnPct >= 0 ? '+' : ''}${rt.returnPct.toFixed(2)}%</td>
+            <td>${rt.holdDays}d</td>
+            <td>${isOpen ? '<span class="badge badge-golden">OPEN</span>' : 'Closed'}</td>
+        </tr>`;
+    });
+    thtml += '</tbody></table>';
+    document.getElementById('detail-trips-table').innerHTML = thtml;
+}
+
+function closeDetail() {
+    selectedTicker = null;
+    document.getElementById('detail-panel').classList.remove('show');
+    renderTable();
+}
+
+// ===================== INIT =====================
+Chart.defaults.color = '#8b8fa3';
+Chart.defaults.borderColor = 'rgba(42,46,63,0.5)';
+
+refreshData();
+</script>
+</body>
+</html>
